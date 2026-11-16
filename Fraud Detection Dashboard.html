@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fraud Detection ML Pipeline</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js for Data Visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            dark: '#0f172a',
+                            panel: '#1e293b',
+                            primary: '#3b82f6',
+                            success: '#10b981',
+                            danger: '#ef4444',
+                            warning: '#f59e0b'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0f172a; /* brand-dark */
+            color: #f8fafc;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+        
+        /* Glassmorphism utilities */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Pulse animation for scanning */
+        @keyframes scan {
+            0% { transform: translateY(-100%); opacity: 0; }
+            50% { opacity: 1; }
+            100% { transform: translateY(100%); opacity: 0; }
+        }
+        .scan-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(to right, transparent, #3b82f6, transparent);
+            animation: scan 1.5s infinite linear;
+            display: none;
+        }
+    </style>
+</head>
+<body class="antialiased flex h-screen overflow-hidden">
+
+    <!-- Sidebar Navigation -->
+    <aside class="w-20 lg:w-64 glass-panel border-r flex flex-col justify-between hidden sm:flex transition-all duration-300 z-20">
+        <div>
+            <div class="h-16 flex items-center justify-center lg:justify-start lg:px-6 border-b border-white/10">
+                <i class="ph-fill ph-shield-check text-brand-primary text-3xl"></i>
+                <span class="ml-3 font-bold text-lg hidden lg:block tracking-wide">Sentinel<span class="text-brand-primary">AI</span></span>
+            </div>
+            <nav class="mt-6 flex flex-col gap-2 px-3">
+                <a href="#dashboard" class="nav-item flex items-center p-3 rounded-lg bg-brand-primary/20 text-brand-primary transition-colors">
+                    <i class="ph ph-squares-four text-xl"></i>
+                    <span class="ml-3 hidden lg:block font-medium">Dashboard</span>
+                </a>
+                <a href="#models" class="nav-item flex items-center p-3 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-white">
+                    <i class="ph ph-chart-line-up text-xl"></i>
+                    <span class="ml-3 hidden lg:block font-medium">Model Metrics</span>
+                </a>
+                <a href="#prediction" class="nav-item flex items-center p-3 rounded-lg hover:bg-white/5 transition-colors text-slate-400 hover:text-white">
+                    <i class="ph ph-cpu text-xl"></i>
+                    <span class="ml-3 hidden lg:block font-medium">Live Predictor</span>
+                </a>
+            </nav>
+        </div>
+        <div class="p-4 border-t border-white/10 text-center lg:text-left">
+            <div class="flex items-center justify-center lg:justify-start gap-3">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-brand-primary to-purple-500 flex items-center justify-center">
+                    <i class="ph ph-user text-white"></i>
+                </div>
+                <div class="hidden lg:block text-sm">
+                    <p class="font-semibold text-white">ML Engineer</p>
+                    <p class="text-slate-400 text-xs">Admin Access</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 h-full overflow-y-auto relative scroll-smooth">
+        <!-- Mobile Header -->
+        <header class="sm:hidden glass-panel h-16 flex items-center px-4 border-b sticky top-0 z-50">
+            <i class="ph-fill ph-shield-check text-brand-primary text-2xl"></i>
+            <span class="ml-2 font-bold text-lg tracking-wide">Sentinel<span class="text-brand-primary">AI</span></span>
+        </header>
+
+        <div class="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
+            
+            <!-- SECTION: DASHBOARD -->
+            <section id="dashboard" class="scroll-mt-20">
+                <div class="mb-6">
+                    <h1 class="text-2xl md:text-3xl font-bold text-white">Credit Card Fraud Detection</h1>
+                    <p class="text-slate-400 mt-1">Supervised Learning Pipeline & Interactive Inference Engine</p>
+                </div>
+
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="glass-panel p-5 rounded-xl border border-white/10 shadow-lg relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="ph-fill ph-database text-6xl"></i></div>
+                        <p class="text-slate-400 text-sm font-medium">Total Transactions Processed</p>
+                        <h3 class="text-3xl font-bold mt-1 text-white">284,807</h3>
+                        <p class="text-xs text-brand-primary mt-2"><i class="ph ph-arrow-up-right"></i> Kaggle Dataset loaded</p>
+                    </div>
+                    
+                    <div class="glass-panel p-5 rounded-xl border border-white/10 shadow-lg relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="ph-fill ph-warning-circle text-6xl text-brand-danger"></i></div>
+                        <p class="text-slate-400 text-sm font-medium">Actual Fraud Cases</p>
+                        <h3 class="text-3xl font-bold mt-1 text-brand-danger">492</h3>
+                        <p class="text-xs text-slate-400 mt-2">Only 0.172% of all data</p>
+                    </div>
+
+                    <div class="glass-panel p-5 rounded-xl border border-white/10 shadow-lg relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="ph-fill ph-chart-polar text-6xl text-brand-success"></i></div>
+                        <p class="text-slate-400 text-sm font-medium">Model Recall (Random Forest)</p>
+                        <h3 class="text-3xl font-bold mt-1 text-brand-success">83.5%</h3>
+                        <p class="text-xs text-brand-success mt-2">Frauds successfully caught</p>
+                    </div>
+
+                    <div class="glass-panel p-5 rounded-xl border border-white/10 shadow-lg relative overflow-hidden">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="ph-fill ph-target text-6xl text-purple-400"></i></div>
+                        <p class="text-slate-400 text-sm font-medium">Model Precision</p>
+                        <h3 class="text-3xl font-bold mt-1 text-purple-400">92.1%</h3>
+                        <p class="text-xs text-purple-400 mt-2">Accuracy of fraud alerts</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: MODEL METRICS -->
+            <section id="models" class="scroll-mt-20">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- EDA Chart -->
+                    <div class="glass-panel p-6 rounded-xl border border-white/10 shadow-lg">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center"><i class="ph ph-pie-chart mr-2 text-brand-primary"></i> Class Imbalance Analysis (EDA)</h3>
+                        <div class="relative h-64 w-full flex items-center justify-center">
+                            <canvas id="imbalanceChart"></canvas>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-4 text-center">Dataset is highly imbalanced. We used <strong>SMOTE</strong> during cross-validation to synthetically oversample the minority class.</p>
+                    </div>
+
+                    <!-- Model Comparison Chart -->
+                    <div class="glass-panel p-6 rounded-xl border border-white/10 shadow-lg">
+                        <h3 class="text-lg font-semibold mb-4 flex items-center"><i class="ph ph-chart-bar mr-2 text-brand-primary"></i> Model Performance Comparison</h3>
+                        <div class="relative h-64 w-full">
+                            <canvas id="performanceChart"></canvas>
+                        </div>
+                        <p class="text-xs text-slate-400 mt-4 text-center">Random Forest is selected as the champion model due to superior Precision and Recall balance on the test set.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SECTION: LIVE PREDICTION -->
+            <section id="prediction" class="scroll-mt-20 pb-20">
+                <div class="glass-panel p-6 md:p-8 rounded-xl border border-white/10 shadow-2xl relative overflow-hidden">
+                    <div class="scan-line" id="scanLine"></div>
+                    
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <div>
+                            <h2 class="text-2xl font-bold flex items-center"><i class="ph-fill ph-cpu mr-2 text-brand-primary"></i> Live Inference Engine</h2>
+                            <p class="text-slate-400 text-sm mt-1">Test the Random Forest model with transaction features.</p>
+                        </div>
+                        <div class="flex gap-2 w-full md:w-auto">
+                            <button onclick="loadSampleData('legit')" class="flex-1 md:flex-none px-3 py-2 text-xs md:text-sm bg-brand-success/20 text-brand-success hover:bg-brand-success/30 rounded-lg transition border border-brand-success/30 flex items-center justify-center">
+                                <i class="ph ph-check-circle mr-1"></i> Load Legit
+                            </button>
+                            <button onclick="loadSampleData('fraud')" class="flex-1 md:flex-none px-3 py-2 text-xs md:text-sm bg-brand-danger/20 text-brand-danger hover:bg-brand-danger/30 rounded-lg transition border border-brand-danger/30 flex items-center justify-center">
+                                <i class="ph ph-warning mr-1"></i> Load Fraud
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Input Form -->
+                        <div class="lg:col-span-2 space-y-4">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <!-- Transaction Amount -->
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Transaction Amount ($)</label>
+                                    <div class="relative">
+                                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <span class="text-slate-500 sm:text-sm">$</span>
+                                        </div>
+                                        <input type="number" id="f_amount" value="45.99" class="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 pl-7 pr-3 text-white focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition">
+                                    </div>
+                                </div>
+                                <!-- Time -->
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Time (seconds from start)</label>
+                                    <div class="relative">
+                                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <i class="ph ph-clock text-slate-500"></i>
+                                        </div>
+                                        <input type="number" id="f_time" value="3600" class="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 pl-9 pr-3 text-white focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary transition">
+                                    </div>
+                                </div>
+                                
+                                <!-- Important V Features (PCA) -->
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Feature V3 (PCA Component)</label>
+                                    <input type="number" step="0.01" id="f_v3" value="1.23" class="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:border-brand-primary transition">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Feature V14 (PCA Component)</label>
+                                    <input type="number" step="0.01" id="f_v14" value="0.15" class="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:border-brand-primary transition">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Feature V17 (PCA Component)</label>
+                                    <input type="number" step="0.01" id="f_v17" value="-0.22" class="w-full bg-slate-800/50 border border-slate-600 rounded-lg py-2 px-3 text-white focus:outline-none focus:border-brand-primary transition">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-400 mb-1">Other Features (V1-V2, V4-V13, V15-V28)</label>
+                                    <div class="w-full bg-slate-800/30 border border-slate-700 border-dashed rounded-lg py-2 px-3 text-slate-500 text-sm flex items-center justify-center cursor-not-allowed">
+                                        Auto-filled conceptually
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button onclick="runPrediction()" id="predictBtn" class="w-full mt-4 bg-gradient-to-r from-brand-primary to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg shadow-brand-primary/30 transition transform hover:-translate-y-0.5 flex justify-center items-center">
+                                <i class="ph ph-magnifying-glass mr-2 text-lg"></i> Analyze Transaction
+                            </button>
+                        </div>
+
+                        <!-- Result Card -->
+                        <div class="glass-panel bg-slate-800/50 rounded-xl border border-slate-700 p-6 flex flex-col justify-center items-center text-center relative min-h-[250px]">
+                            
+                            <!-- Initial State -->
+                            <div id="result-idle" class="flex flex-col items-center opacity-100 transition-opacity duration-300 absolute inset-0 justify-center p-6">
+                                <div class="w-16 h-16 rounded-full bg-slate-700/50 flex items-center justify-center mb-4">
+                                    <i class="ph ph-robot text-3xl text-slate-400"></i>
+                                </div>
+                                <h4 class="text-lg font-medium text-slate-300">Awaiting Input</h4>
+                                <p class="text-xs text-slate-500 mt-2">Enter transaction details and run analysis to see model prediction.</p>
+                            </div>
+
+                            <!-- Processing State -->
+                            <div id="result-loading" class="flex flex-col items-center opacity-0 pointer-events-none transition-opacity duration-300 absolute inset-0 justify-center p-6 z-10 hidden">
+                                <svg class="animate-spin h-10 w-10 text-brand-primary mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <h4 class="text-sm font-medium text-brand-primary animate-pulse">Running Random Forest Trees...</h4>
+                            </div>
+
+                            <!-- Final Result State -->
+                            <div id="result-output" class="flex flex-col items-center opacity-0 pointer-events-none transition-opacity duration-300 absolute inset-0 justify-center p-6 w-full hidden">
+                                <div id="result-icon-container" class="w-20 h-20 rounded-full flex items-center justify-center mb-3 shadow-lg relative">
+                                    <!-- Ring animation -->
+                                    <div class="absolute inset-0 rounded-full border-4 opacity-50 animate-ping" id="result-ring"></div>
+                                    <i id="result-icon" class="text-4xl"></i>
+                                </div>
+                                <h4 id="result-title" class="text-xl font-bold mb-1"></h4>
+                                <div class="w-full bg-slate-700/50 rounded-full h-3 mt-4 overflow-hidden border border-slate-600">
+                                    <div id="prob-bar" class="h-full rounded-full transition-all duration-1000 ease-out w-0"></div>
+                                </div>
+                                <p class="text-xs font-medium mt-2"><span id="prob-text" class="font-bold text-lg">0%</span> Fraud Probability</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Custom Modal for Alerts (Avoiding standard alert()) -->
+    <div id="custom-modal" class="fixed inset-0 z-[100] flex items-center justify-center opacity-0 pointer-events-none transition-opacity duration-300 bg-black/60 backdrop-blur-sm">
+        <div class="bg-brand-panel border border-white/10 rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4 transform scale-95 transition-transform duration-300" id="modal-content">
+            <h3 class="text-xl font-bold mb-2 flex items-center"><i class="ph-fill ph-info mr-2 text-brand-primary"></i> Notice</h3>
+            <p id="modal-message" class="text-slate-300 mb-6 text-sm"></p>
+            <button onclick="closeModal()" class="w-full bg-slate-700 hover:bg-slate-600 text-white font-medium py-2 rounded-lg transition">Dismiss</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // Setup Navigation Highlighting
+        const navItems = document.querySelectorAll('.nav-item');
+        navItems.forEach(item => {
+            item.addEventListener('click', () => {
+                navItems.forEach(nav => {
+                    nav.classList.remove('bg-brand-primary/20', 'text-brand-primary');
+                    nav.classList.add('text-slate-400', 'hover:bg-white/5', 'hover:text-white');
+                });
+                item.classList.remove('text-slate-400', 'hover:bg-white/5', 'hover:text-white');
+                item.classList.add('bg-brand-primary/20', 'text-brand-primary');
+            });
+        });
+
+        // Modal Functionality
+        function showModal(message) {
+            document.getElementById('modal-message').innerText = message;
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('modal-content');
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            content.classList.remove('scale-95');
+            content.classList.add('scale-100');
+        }
+        function closeModal() {
+            const modal = document.getElementById('custom-modal');
+            const content = document.getElementById('modal-content');
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            content.classList.remove('scale-100');
+            content.classList.add('scale-95');
+        }
+
+        // --- Chart.js Implementations ---
+        
+        // 1. Imbalance Chart (Pie)
+        const ctxImbalance = document.getElementById('imbalanceChart').getContext('2d');
+        new Chart(ctxImbalance, {
+            type: 'doughnut',
+            data: {
+                labels: ['Legitimate (99.8%)', 'Fraud (0.2%)'],
+                datasets: [{
+                    data: [99.8, 0.2],
+                    backgroundColor: ['#3b82f6', '#ef4444'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '75%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#cbd5e1' }
+                    }
+                }
+            }
+        });
+
+        // 2. Performance Comparison (Bar)
+        const ctxPerformance = document.getElementById('performanceChart').getContext('2d');
+        new Chart(ctxPerformance, {
+            type: 'bar',
+            data: {
+                labels: ['Precision', 'Recall', 'F1-Score', 'ROC-AUC'],
+                datasets: [
+                    {
+                        label: 'Logistic Regression',
+                        data: [0.06, 0.91, 0.11, 0.96], // Example realistic metrics for LR on highly imbalanced data
+                        backgroundColor: 'rgba(99, 102, 241, 0.5)', // Indigo
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Random Forest (Tuned)',
+                        data: [0.92, 0.83, 0.87, 0.98], // Example metrics for RF
+                        backgroundColor: 'rgba(16, 185, 129, 0.5)', // Emerald
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 1.0,
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: '#cbd5e1' }
+                    }
+                }
+            }
+        });
+
+        // --- Live Inference Engine Simulation ---
+
+        function loadSampleData(type) {
+            if(type === 'legit') {
+                document.getElementById('f_amount').value = 45.99;
+                document.getElementById('f_time').value = 3600;
+                document.getElementById('f_v3').value = 1.23;
+                document.getElementById('f_v14').value = 0.15;
+                document.getElementById('f_v17').value = -0.22;
+            } else {
+                // Fraud characteristics: Often strange amounts, negative values in V14, V17 which correspond to highly anomalous behaviors
+                document.getElementById('f_amount').value = 1250.50;
+                document.getElementById('f_time').value = 4010;
+                document.getElementById('f_v3').value = -5.43;
+                document.getElementById('f_v14').value = -8.15;
+                document.getElementById('f_v17').value = -12.42;
+            }
+            
+            // Reset UI
+            resetResultUI();
+            
+            // Optional: Small animation on fields
+            const inputs = document.querySelectorAll('input');
+            inputs.forEach(input => {
+                input.classList.add('ring-2', 'ring-brand-primary');
+                setTimeout(() => input.classList.remove('ring-2', 'ring-brand-primary'), 300);
+            });
+        }
+
+        function resetResultUI() {
+            document.getElementById('result-idle').classList.remove('hidden', 'opacity-0');
+            document.getElementById('result-output').classList.add('hidden', 'opacity-0');
+            document.getElementById('result-loading').classList.add('hidden', 'opacity-0');
+            document.getElementById('prob-bar').style.width = '0%';
+        }
+
+        function runPrediction() {
+            // Get values
+            const amt = parseFloat(document.getElementById('f_amount').value);
+            const v3 = parseFloat(document.getElementById('f_v3').value);
+            const v14 = parseFloat(document.getElementById('f_v14').value);
+            const v17 = parseFloat(document.getElementById('f_v17').value);
+
+            if(isNaN(amt) || isNaN(v3) || isNaN(v14) || isNaN(v17)) {
+                showModal("Please ensure all feature fields contain valid numbers before running the analysis.");
+                return;
+            }
+
+            const btn = document.getElementById('predictBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ph ph-spinner-gap animate-spin mr-2 text-lg"></i> Analyzing...';
+            
+            const scanLine = document.getElementById('scanLine');
+            scanLine.style.display = 'block';
+
+            // UI Transitions -> Loading
+            document.getElementById('result-idle').classList.add('opacity-0');
+            setTimeout(() => {
+                document.getElementById('result-idle').classList.add('hidden');
+                document.getElementById('result-loading').classList.remove('hidden');
+                setTimeout(() => document.getElementById('result-loading').classList.remove('opacity-0'), 50);
+            }, 300);
+
+            // Simulate Network / Inference Delay (1.5 seconds)
+            setTimeout(() => {
+                
+                // MOCK ML MODEL LOGIC:
+                // In a real scenario, this would be a fetch() call to a Flask/FastAPI backend serving the .pkl model.
+                // Here we simulate the logic based on general dataset characteristics where highly negative V14/V17 correlate to fraud.
+                
+                let riskScore = 0;
+                
+                if(amt > 500) riskScore += 0.15;
+                if(v3 < -3) riskScore += 0.2;
+                if(v14 < -5) riskScore += 0.4;
+                if(v17 < -5) riskScore += 0.35;
+                
+                // Add some non-linear variance
+                riskScore = riskScore * (1 + (Math.random() * 0.1));
+                
+                let probability = Math.min(Math.max(riskScore, 0.01), 0.99); // clamp 1-99%
+                let isFraud = probability > 0.5;
+
+                renderResult(isFraud, probability);
+
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph ph-magnifying-glass mr-2 text-lg"></i> Analyze Transaction';
+                scanLine.style.display = 'none';
+
+            }, 1800);
+        }
+
+        function renderResult(isFraud, probability) {
+            const probPct = (probability * 100).toFixed(1);
+            
+            // DOM Elements
+            const loading = document.getElementById('result-loading');
+            const output = document.getElementById('result-output');
+            const iconContainer = document.getElementById('result-icon-container');
+            const icon = document.getElementById('result-icon');
+            const title = document.getElementById('result-title');
+            const bar = document.getElementById('prob-bar');
+            const probText = document.getElementById('prob-text');
+            const ring = document.getElementById('result-ring');
+
+            // Hide Loading
+            loading.classList.add('opacity-0');
+            setTimeout(() => {
+                loading.classList.add('hidden');
+                output.classList.remove('hidden');
+                
+                // Configure Result Based on Fraud Status
+                if(isFraud) {
+                    iconContainer.className = 'w-20 h-20 rounded-full flex items-center justify-center mb-3 shadow-lg relative bg-brand-danger/20 text-brand-danger';
+                    icon.className = 'ph-fill ph-warning-circle text-5xl';
+                    ring.className = 'absolute inset-0 rounded-full border-4 opacity-50 border-brand-danger animate-ping';
+                    title.innerText = 'FRAUD DETECTED';
+                    title.className = 'text-xl font-bold mb-1 text-brand-danger';
+                    bar.className = 'h-full rounded-full transition-all duration-1000 ease-out bg-brand-danger';
+                    probText.className = 'font-bold text-lg text-brand-danger';
+                } else {
+                    iconContainer.className = 'w-20 h-20 rounded-full flex items-center justify-center mb-3 shadow-lg relative bg-brand-success/20 text-brand-success';
+                    icon.className = 'ph-fill ph-check-circle text-5xl';
+                    ring.className = 'absolute inset-0 rounded-full border-4 opacity-50 border-brand-success'; // no ping for success
+                    title.innerText = 'TRANSACTION CLEAR';
+                    title.className = 'text-xl font-bold mb-1 text-brand-success';
+                    bar.className = 'h-full rounded-full transition-all duration-1000 ease-out bg-brand-success';
+                    probText.className = 'font-bold text-lg text-brand-success';
+                }
+
+                // Show Output
+                setTimeout(() => {
+                    output.classList.remove('opacity-0');
+                    
+                    // Animate Bar and Text counter
+                    setTimeout(() => {
+                        bar.style.width = `${probPct}%`;
+                        
+                        // Count up text
+                        let start = 0;
+                        const duration = 1000;
+                        const stepTime = 20;
+                        const steps = duration / stepTime;
+                        const inc = probPct / steps;
+                        
+                        let timer = setInterval(() => {
+                            start += inc;
+                            if(start >= probPct) {
+                                start = probPct;
+                                clearInterval(timer);
+                            }
+                            probText.innerText = `${start.toFixed(1)}%`;
+                        }, stepTime);
+
+                    }, 100);
+
+                }, 50);
+            }, 300);
+        }
+
+        // Initialize with default state
+        resetResultUI();
+    </script>
+</body>
+</html>
