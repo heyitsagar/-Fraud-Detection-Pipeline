@@ -1,0 +1,368 @@
+# Project: Supervised Learning – Credit Card Fraud Detection Pipeline
+
+## 1. Project Objective
+The objective of this project is to develop a robust machine learning classification system that accurately identifies fraudulent financial transactions. Because fraud is rare, the dataset is highly imbalanced. Our goal is to maximize the detection of actual fraud (High Recall) while minimizing false alarms that might inconvenience legitimate customers (High Precision).
+
+## 2. Dataset Explanation
+We are using the **Credit Card Fraud Detection** dataset from Kaggle.
+*   **Time:** Number of seconds elapsed between this transaction and the first transaction in the dataset.
+*   **V1 to V28:** These are anonymized features. To protect user privacy, the original features (like location, item bought, etc.) were passed through a Principal Component Analysis (PCA) transformation.
+*   **Amount:** The total transaction amount.
+*   **Class:** The target variable (0 = Legitimate Transaction, 1 = Fraudulent Transaction).
+
+---
+
+## Step 1: Install & Import Technologies
+First, we need to import the required Python libraries. If you are using Google Colab, these are mostly pre-installed, but we will ensure `imbalanced-learn` is available.
+
+```python
+# Run this in your first Colab cell
+# !pip install -U imbalanced-learn pandas numpy matplotlib seaborn scikit-learn
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Scikit-Learn modules
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
+                             roc_auc_score, confusion_matrix, precision_recall_curve, 
+                             roc_curve, classification_report, auc)
+
+# Imbalanced-Learn modules
+from imblearn.over_sampling import SMOTE
+from imblearn.pipeline import Pipeline as ImbPipeline
+
+import warnings
+warnings.filterwarnings('ignore')
+```
+
+---
+
+## Step 2: Data Preprocessing and EDA
+We will load the data, check for missing values and duplicates, and visualize the severe class imbalance.
+
+*Note: Download `creditcard.csv` from Kaggle and upload it to your Colab environment.*
+
+```python
+# Load the dataset
+# Assuming the file is in the current working directory
+try:
+    df = pd.read_csv('creditcard.csv')
+    print("Dataset loaded successfully!")
+except FileNotFoundError:
+    print("Please upload 'creditcard.csv' to your Colab environment.")
+
+# 1. Basic Data Exploration
+print("Dataset Shape:", df.shape)
+print("\nMissing Values:\n", df.isnull().sum().max()) # Should be 0
+
+# 2. Check and remove duplicates
+duplicates = df.duplicated().sum()
+print(f"\nFound {duplicates} duplicate rows. Dropping them...")
+df = df.drop_duplicates()
+print("New Dataset Shape:", df.shape)
+
+# 3. Class Imbalance Analysis
+fraud_count = df['Class'].value_counts()[1]
+legit_count = df['Class'].value_counts()[0]
+print(f"\nLegitimate Transactions: {legit_count} ({legit_count/len(df)*100:.2f}%)")
+print(f"Fraudulent Transactions: {fraud_count} ({fraud_count/len(df)*100:.2f}%)")
+
+# Visualization: Class Distribution
+plt.figure(figsize=(6, 4))
+sns.countplot(x='Class', data=df, palette='viridis')
+plt.title('Class Distribution (0: Legitimate, 1: Fraud)')
+plt.yscale('log') # Log scale used because of massive imbalance
+plt.ylabel('Count (Log Scale)')
+plt.show()
+```
+
+---
+
+## Step 3: Feature Scaling and Train-Test Split
+Machine learning models perform better when numerical features are on the same scale. The `V1-V28` features are already scaled via PCA, but `Time` and `Amount` are not. We will use `StandardScaler` for them.
+
+**Crucial Step:** We must split the data *before* applying SMOTE. Applying SMOTE before splitting leads to **data leakage**, where synthetic copies of test data end up in the training set, causing artificially high performance.
+
+```python
+# Scale Time and Amount
+scaler = StandardScaler()
+df['Scaled_Amount'] = scaler.fit_transform(df['Amount'].values.reshape(-1,1))
+df['Scaled_Time'] = scaler.fit_transform(df['Time'].values.reshape(-1,1))
+
+# Drop original unscaled columns
+df.drop(['Time', 'Amount'], axis=1, inplace=True)
+
+# Define X (features) and y (target)
+X = df.drop('Class', axis=1)
+y = df['Class']
+
+# Stratified Train-Test Split (maintains the 99.8% / 0.2% ratio in both sets)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+
+print("Training Data Shape:", X_train.shape)
+print("Testing Data Shape:", X_test.shape)
+```
+
+---
+
+## Step 4: Handling Class Imbalance (SMOTE)
+**What is SMOTE?** SMOTE (Synthetic Minority Over-sampling Technique) creates fake (synthetic) data points for the minority class (Fraud). It does this by picking a fraud data point, finding its closest fraud neighbors, and drawing a line between them to place a new, realistic synthetic point.
+
+**Why use Imblearn's Pipeline?** When performing Cross-Validation, if we apply SMOTE to the whole training set beforehand, data leaks into the validation folds. `imblearn.pipeline.Pipeline` ensures SMOTE is applied *only* to the training fold of each CV split.
+
+```python
+# Let's visualize what SMOTE does conceptually by applying it just to a copy of the train set
+smote_demo = SMOTE(random_state=42)
+X_train_smote, y_train_smote = smote_demo.fit_resample(X_train, y_train)
+
+print("Before SMOTE (Train Set):")
+print(y_train.value_counts())
+print("\nAfter SMOTE (Train Set):")
+print(y_train_smote.value_counts())
+
+# Visualization: Before vs After SMOTE
+fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+sns.countplot(x=y_train, ax=axes[0], palette='Blues')
+axes[0].set_title('Class Distribution BEFORE SMOTE')
+axes[0].set_yscale('log')
+
+sns.countplot(x=y_train_smote, ax=axes[1], palette='Oranges')
+axes[1].set_title('Class Distribution AFTER SMOTE')
+plt.show()
+```
+
+---
+
+## Step 5: Understanding Evaluation Metrics
+In fraud detection, **Accuracy is useless**. If a model predicts "0" (Legitimate) for *every* transaction, it will be 99.8% accurate, but it will catch exactly zero frauds!
+
+*   **False Positives (FP):** Model flags a legitimate transaction as fraud. (Annoying to customers).
+*   **False Negatives (FN):** Model labels a fraud as legitimate. (Massive financial loss).
+*   **Precision:** "Out of all transactions flagged as fraud, how many were actually fraud?" (Focuses on minimizing FP).
+*   **Recall:** "Out of all actual frauds, how many did we successfully catch?" (Focuses on minimizing FN). In fraud detection, **Recall is usually the most important**.
+*   **F1-Score:** The harmonic mean of Precision and Recall.
+*   **ROC-AUC:** Measures the model's ability to distinguish between classes.
+
+---
+
+## Step 6: Model Training and Hyperparameter Tuning
+We will use `RandomizedSearchCV` for hyperparameter tuning. It randomly tests combinations of parameters, which is much faster than `GridSearchCV` (especially important when using SMOTE + Random Forest on large datasets).
+
+### Model 1: Logistic Regression
+```python
+# 1. Define the Imblearn Pipeline (SMOTE -> Model)
+lr_pipeline = ImbPipeline([
+    ('smote', SMOTE(random_state=42)),
+    ('classifier', LogisticRegression(max_iter=1000, random_state=42))
+])
+
+# 2. Define Hyperparameters to tune
+lr_params = {
+    'classifier__C': [0.01, 0.1, 1, 10],
+    'classifier__penalty': ['l2']
+}
+
+# 3. Randomized Search CV
+# Scoring using average_precision (Area under PR curve) which is best for imbalanced data
+lr_search = RandomizedSearchCV(lr_pipeline, param_distributions=lr_params, 
+                               n_iter=4, cv=3, scoring='average_precision', 
+                               n_jobs=-1, random_state=42)
+
+print("Training and Tuning Logistic Regression... (This may take a minute)")
+lr_search.fit(X_train, y_train)
+
+# Best Model
+best_lr = lr_search.best_estimator_
+print("Best Logistic Regression Params:", lr_search.best_params_)
+
+# Predictions
+y_pred_lr = best_lr.predict(X_test)
+y_prob_lr = best_lr.predict_proba(X_test)[:, 1]
+```
+
+### Model 2: Random Forest Classifier
+*Note: Random Forest with SMOTE on 227k rows can be computationally heavy. We use fewer estimators and depth to ensure it runs efficiently in Colab for demonstration.*
+
+```python
+# 1. Define Pipeline
+rf_pipeline = ImbPipeline([
+    ('smote', SMOTE(random_state=42)),
+    ('classifier', RandomForestClassifier(random_state=42, n_jobs=-1))
+])
+
+# 2. Define Hyperparameters (Kept lightweight for Colab)
+rf_params = {
+    'classifier__n_estimators': [50, 100],
+    'classifier__max_depth': [5, 10],
+    'classifier__min_samples_split': [2, 5]
+}
+
+# 3. Randomized Search CV
+rf_search = RandomizedSearchCV(rf_pipeline, param_distributions=rf_params, 
+                               n_iter=3, cv=3, scoring='average_precision', 
+                               random_state=42)
+
+print("Training and Tuning Random Forest... (This may take a few minutes)")
+rf_search.fit(X_train, y_train)
+
+best_rf = rf_search.best_estimator_
+print("Best Random Forest Params:", rf_search.best_params_)
+
+# Predictions
+y_pred_rf = best_rf.predict(X_test)
+y_prob_rf = best_rf.predict_proba(X_test)[:, 1]
+```
+
+---
+
+## Step 7: Model Evaluation & Visualizations
+
+```python
+def evaluate_model(y_true, y_pred, y_prob, model_name):
+    print(f"--- Evaluation Metrics for {model_name} ---")
+    print(classification_report(y_true, y_pred))
+    
+    metrics = {
+        'Model': model_name,
+        'Precision': precision_score(y_true, y_pred),
+        'Recall': recall_score(y_true, y_pred),
+        'F1-Score': f1_score(y_true, y_pred),
+        'ROC-AUC': roc_auc_score(y_true, y_prob)
+    }
+    return metrics
+
+# Calculate metrics
+lr_metrics = evaluate_model(y_test, y_pred_lr, y_prob_lr, "Logistic Regression")
+rf_metrics = evaluate_model(y_test, y_pred_rf, y_prob_rf, "Random Forest")
+
+# Visualizations function
+def plot_evaluations(y_test, y_pred, y_prob, model_name):
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    
+    # 1. Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=axes[0])
+    axes[0].set_title(f'Confusion Matrix - {model_name}')
+    axes[0].set_xlabel('Predicted')
+    axes[0].set_ylabel('Actual')
+    
+    # 2. ROC Curve
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+    roc_auc = auc(fpr, tpr)
+    axes[1].plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.3f})')
+    axes[1].plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    axes[1].set_title('ROC Curve')
+    axes[1].set_xlabel('False Positive Rate')
+    axes[1].set_ylabel('True Positive Rate')
+    axes[1].legend(loc="lower right")
+    
+    # 3. Precision-Recall Curve
+    precision, recall, _ = precision_recall_curve(y_test, y_prob)
+    pr_auc = auc(recall, precision)
+    axes[2].plot(recall, precision, color='purple', lw=2, label=f'PR curve (AUC = {pr_auc:.3f})')
+    axes[2].set_title('Precision-Recall Curve')
+    axes[2].set_xlabel('Recall')
+    axes[2].set_ylabel('Precision')
+    axes[2].legend(loc="lower left")
+    
+    plt.tight_layout()
+    plt.show()
+
+# Plot for both models
+plot_evaluations(y_test, y_pred_lr, y_prob_lr, "Logistic Regression")
+plot_evaluations(y_test, y_pred_rf, y_prob_rf, "Random Forest")
+```
+
+---
+
+## Step 8: Model Comparison Table
+Let's summarize the results to easily identify the best-performing model.
+
+```python
+# Create Comparison DataFrame
+comparison_df = pd.DataFrame([lr_metrics, rf_metrics])
+comparison_df.set_index('Model', inplace=True)
+
+print("\n--- Final Model Comparison ---")
+display(comparison_df)
+
+# Plot comparison
+comparison_df.plot(kind='bar', figsize=(10, 6), colormap='Set2')
+plt.title('Model Performance Comparison')
+plt.ylabel('Score')
+plt.xticks(rotation=0)
+plt.ylim(0, 1.1)
+plt.legend(loc='lower right')
+plt.grid(axis='y', linestyle='--', alpha=0.7)
+plt.show()
+```
+
+### Best Model Selection
+Based on the highly imbalanced nature of our data, the **Precision-Recall Area Under Curve (PR-AUC)** and **Recall** are the most vital metrics.
+*   **Logistic Regression** generally catches more frauds (high Recall) but at the cost of many false alarms (low Precision).
+*   **Random Forest** offers a much better balance. It achieves a significantly higher Precision while maintaining decent Recall, minimizing false flags while catching fraud. Thus, **Random Forest is our selected best model**.
+
+---
+
+## Step 9: Final Interactive Prediction System
+Below is a function that simulates a real-time banking application. You can input transaction features, and the system will output a prediction.
+
+```python
+def predict_fraud(model, feature_array):
+    """
+    Predicts if a transaction is legitimate or fraudulent.
+    feature_array: List or numpy array of exactly 30 features 
+                   (V1-V28, Scaled_Amount, Scaled_Time)
+    """
+    # Ensure it's a 2D array
+    features = np.array(feature_array).reshape(1, -1)
+    
+    # Get prediction and probability
+    prediction = model.predict(features)[0]
+    probability = model.predict_proba(features)[0][1] * 100
+    
+    print("-" * 40)
+    print("💳 TRANSACTION ANALYSIS RESULT")
+    print("-" * 40)
+    if prediction == 1:
+        print(f"⚠️ WARNING: Potentially Fraudulent Transaction Detected!")
+    else:
+        print(f"✅ Transaction Cleared: Legitimate.")
+        
+    print(f"Fraud Probability: {probability:.2f}%")
+    print("-" * 40)
+
+# --- Test the Interactive System ---
+# Let's take one random legitimate transaction and one fraud transaction from our test set
+sample_legit = X_test[y_test == 0].iloc[0].values
+sample_fraud = X_test[y_test == 1].iloc[0].values
+
+print("Testing a known Legitimate Transaction:")
+predict_fraud(best_rf, sample_legit)
+
+print("\nTesting a known Fraudulent Transaction:")
+predict_fraud(best_rf, sample_fraud)
+```
+
+---
+
+## 10. Conclusion, Limitations, and Future Work
+
+### Conclusion
+We successfully built a Supervised Machine Learning pipeline to detect fraudulent credit card transactions. By addressing the severe class imbalance using SMOTE within a strict cross-validation pipeline, we prevented data leakage. We tuned and compared Logistic Regression and Random Forest, evaluating them on business-critical metrics like Recall and PR-AUC rather than misleading Accuracy. 
+
+### Limitations
+1. **Computational Cost:** SMOTE combined with complex tree ensembles (like Random Forest) is computationally expensive on massive datasets.
+2. **Feature Anonymity:** Because V1-V28 are PCA-transformed, we cannot extract direct business insights (e.g., "Purchases in foreign countries are highly fraudulent").
+3. **Static Model:** Financial fraud tactics evolve rapidly. A model trained on static historical data will degrade over time without continuous retraining (Concept Drift).
+
+### Future Improvements
+1. **Advanced Algorithms:** Test gradient boosting frameworks like XGBoost or LightGBM which handle imbalanced data exceptionally well intrinsically.
+2. **Deep Learning:** Implement Autoencoders for anomaly detection (Unsupervised Learning) as an alternative to SMOTE.
+3. **Cost-Sensitive Learning:** Instead of oversampling, assign heavier penalty weights to the minority class directly in the algorithm's hyperparameters (e.g., `class_weight='balanced'`).
